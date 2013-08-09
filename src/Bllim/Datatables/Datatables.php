@@ -30,7 +30,7 @@ class Datatables
 	public 		$columns 		= array();
 	public 		$last_columns 		= array();
 
-	protected	$count_all		= 0;
+	public          $count_all		= 0;//make variable public so it can be accessed outside the class for info purpose
 
 	protected	$result_object;
 	protected	$result_array		= array();
@@ -165,6 +165,7 @@ class Datatables
 
 	private function init_columns()
 	{
+                $index = 0;//keep an index/counter of columns
 		foreach ($this->result_array as $rkey => &$rvalue) {
 
 			foreach ($this->extra_columns as $key => $value) {
@@ -172,7 +173,7 @@ class Datatables
 				if (is_string($value['content'])):
 					$value['content'] = $this->blader($value['content'], $rvalue);
 				elseif (is_callable($value['content'])):
-					$value['content'] = $value['content']($rvalue);
+					$value['content'] = $value['content']($rvalue,$index,$this);//the Closure now accepts 3 params - very useful if you need extra contest for the current column
 				endif;
 
 				$rvalue = $this->include_in_array($value,$rvalue);
@@ -183,12 +184,13 @@ class Datatables
 				if (is_string($value['content'])):
 					$value['content'] = $this->blader($value['content'], $rvalue);
 				elseif (is_callable($value['content'])):
-					$value['content'] = $value['content']($rvalue);
+					$value['content'] = $value['content']($rvalue,$index,$this);//the Closure now accepts 3 params - very useful if you need extra contest for the current column
 				endif;
 
 				$rvalue[$value['name']] = $value['content'];
 
 			}
+                        $index++;
 		}
 	}
 
@@ -390,6 +392,7 @@ class Datatables
 						$cast_begin = null;
 						$cast_end = null;
 						$column_max_length = 255;
+                                                if(strpos($column,".") > 0)://this makes possibile to not specify the syntax TABLE.COLUMN for every column in the query
 						preg_match('#([^.]+)\.(.+)$#si', $column, $table_infos);
 						if(empty($table_infos)) {
 							throw new \Exception("Invalid table and column names format for '".$column."'");
@@ -408,6 +411,7 @@ class Datatables
 								$cast_end = " as CHAR(".$column_max_length."))";
 							}
 						}
+                                                endif;
 						
 						$column = $db_prefix . $column;
 						if(Config::get('datatables.search.case_insensitive', false)) {
@@ -428,16 +432,20 @@ class Datatables
 			if (Input::get('bSearchable_'.$i) == "true" && Input::get('sSearch_'.$i) != '')
 			{
 				$keyword = '%'.Input::get('sSearch_'.$i).'%';
+                                //this checks if the column is in the form "COLUMN AS ALIAS"
+                                preg_match('#^(\S*?)\s+as\s+(\S*?)$#si',$this->columns[$i],$matches);
+                                               
+				$column = empty($matches) ? $this->columns[$i] : $matches[1];
 
 				if(Config::get('datatables.search.use_wildcards', false)) {
 					$keyword = $copy_this->wildcard_like_string(Input::get('sSearch_'.$i));
 				}
 
 				if(Config::get('datatables.search.case_insensitive', false)) {
-					$column = $db_prefix . $this->columns[$i];
+					$column = $db_prefix . $column;
 					$this->query->where(DB::raw('LOWER('.$column.')'),'LIKE', $keyword);
 				} else {
-					$this->query->where($this->columns[$i], 'LIKE', $keyword);
+					$this->query->where($column, 'LIKE', $keyword);
 				}
 			}
 		}
